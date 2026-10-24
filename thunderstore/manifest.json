@@ -1,6 +1,6 @@
 {
   "name": "MoreEvents",
-  "version_number": "1.0.2",
+  "version_number": "1.0.3",
   "website_url": "https://github.com/kamikaze-skynet/MoreEvents",
   "description": "Six new in-run events: Bounty, King of the Hill, Golden Swarm, Escort the Fungus, Cursed Ground and Elite Gauntlet, with their own banner, rings, markers and rewards.",
   "dependencies": [

@@ -35,3 +35,7 @@ Each event shows a banner (title, timer, progress bar), rings on the ground, and
 - **`[EscortTheFungus]`**: `TimeLimit`, `Distance`, `Health`.
 - **`[CursedGround]`**: `Duration`, `DamagePercentPerSecond`, `StartRadius`, `EndRadius`.
 - **`[EliteGauntlet]`**: `Elites`, `TimeLimit`.
+
+## Multiplayer settings
+
+In multiplayer everyone plays with the **host's** settings: the host's config is sent to every player from the lobby on, and the mod reads it instead of yours while you're connected. Your own the event key stay yours. Your config file is never changed. If the host doesn't have this mod, it stays off for you in that game.

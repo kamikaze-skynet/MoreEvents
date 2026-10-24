@@ -1,3 +1,6 @@
+## 1.0.3
+- **Everyone uses the host's settings.** While you're in someone's game, this mod reads the host's config instead of yours, from the lobby on. Your own the event key stay yours. Your config file isn't changed, and your own values are back when you leave. If the host doesn't have the mod, it stays off for you in that game.
+
 ## 1.0.2
 - Fixed events not showing for other players: their games rejected every event update from the host (wrong field count).
 

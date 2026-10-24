@@ -16,7 +16,7 @@ public class Plugin : BasePlugin
 {
     public const string Guid = "girthy_mods.MoreEvents";
     public const string Name = "MoreEvents";
-    public const string Version = "1.0.2";
+    public const string Version = "1.0.3";
 
     internal static new ManualLogSource Log;
 
@@ -41,6 +41,7 @@ public class Plugin : BasePlugin
     public override void Load()
     {
         Log = base.Log;
+        HostConfig.Init(this, Guid, new[] { "General.StartEventKey" }, new System.Collections.Generic.Dictionary<string, string> { ["General.Enabled"] = "false" });
 
         Enabled = Config.Bind("General", "Enabled", true, "Run the extra events (host).");
         FirstEventAfter = Config.Bind("General", "FirstEventAfterSeconds", 120f,
