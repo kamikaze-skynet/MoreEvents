@@ -133,7 +133,7 @@ internal static class Net
         {
             reader.ReadValueSafe(out string payload, false);
             var f = payload.Split('|');
-            if (f.Length < 11 || f[0] != "3") return;
+            if (f.Length < 10 || f[0] != "3") return; // 3|key|phase|title|line|result|timer|progress|accent|markers
             var s = new EventState
             {
                 Key = f[1], Phase = int.Parse(f[2], CultureInfo.InvariantCulture), Title = f[3], Line = f[4], Result = f[5],
