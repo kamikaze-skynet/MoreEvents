@@ -87,7 +87,12 @@ internal static class Net
 
     private static string Clean(string s) => (s ?? "").Replace("|", "/").Replace("~", "-").Replace(",", " ");
     private static string F(float f) => f.ToString("0.##", CultureInfo.InvariantCulture);
-    private static string Hex(Color c) => ColorUtility.ToHtmlStringRGBA(c);
+    // ColorUtility.ToHtmlStringRGBA is stripped from this game build: format and parse colours ourselves.
+    private static string Hex(Color c)
+    {
+        int B(float v) => Mathf.Clamp(Mathf.RoundToInt(v * 255f), 0, 255);
+        return $"{B(c.r):X2}{B(c.g):X2}{B(c.b):X2}{B(c.a):X2}";
+    }
 
     private static string Serialize(EventState s)
     {
@@ -111,7 +116,16 @@ internal static class Net
     }
 
     private static float P(string s) => float.Parse(s, NumberStyles.Float, CultureInfo.InvariantCulture);
-    private static Color C(string s) => ColorUtility.TryParseHtmlString("#" + s, out var c) ? c : Color.white;
+    private static Color C(string s)
+    {
+        try
+        {
+            if (s.Length < 6) return Color.white;
+            float H(int i) => int.Parse(s.Substring(i, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture) / 255f;
+            return new Color(H(0), H(2), H(4), s.Length >= 8 ? H(6) : 1f);
+        }
+        catch { return Color.white; }
+    }
 
     private static void OnReceived(ulong sender, FastBufferReader reader)
     {

@@ -16,7 +16,7 @@ public class Plugin : BasePlugin
 {
     public const string Guid = "girthy_mods.MoreEvents";
     public const string Name = "MoreEvents";
-    public const string Version = "1.0.0";
+    public const string Version = "1.0.1";
 
     internal static new ManualLogSource Log;
 
