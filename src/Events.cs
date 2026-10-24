@@ -51,7 +51,7 @@ internal sealed class BountyEvent : RunEvent
     public override Color Accent => Red;
     public override int Weight => Plugin.BountyWeight.Value;
 
-    private NetworkObject target;
+    private Game.Tracked target;
     private string name = "";
     private float Limit => Mathf.Max(10f, Plugin.BountyTime.Value);
 
@@ -61,7 +61,7 @@ internal sealed class BountyEvent : RunEvent
         foreach (var (_, elites) in Game.EliteLists()) { type = Game.RandomEliteFrom(elites); if (type != null) break; }
         if (type == null && Game.CanSpawn(EnemyType.Crablodon)) type = EnemyType.Crablodon;
         if (type == null) return false;
-        target = Game.Spawn(type.Value, Game.PointInRing(Game.PartyCentre(), 14f, 22f));
+        Game.SpawnTracked(type.Value, Game.PointInRing(Game.PartyCentre(), 14f, 22f), out target);
         name = Pretty(type.Value.ToString());
         return target != null;
     }
@@ -71,7 +71,7 @@ internal sealed class BountyEvent : RunEvent
         var fate = Game.FateOf(target);
         if (fate == Game.Fate.Killed) return true;
         if (fate == Game.Fate.Gone) return false;
-        if (Elapsed >= Limit) { Game.Despawn(target); return false; }
+        if (Elapsed >= Limit) { Game.Despawn(target.Obj); return false; }
         return null;
     }
 
@@ -79,7 +79,7 @@ internal sealed class BountyEvent : RunEvent
     {
         s.Line = $"Kill the marked {name} before it escapes!";
         s.Timer = Mathf.Max(0f, Limit - Elapsed);
-        if (Game.Alive(target)) s.Markers.Add(new Marker { Kind = MarkerKind.Follow, NetId = target.NetworkObjectId, Icon = "skull", Color = Red, Radius = 2.2f });
+        if (!target.Dead && Game.Alive(target.Obj)) s.Markers.Add(new Marker { Kind = MarkerKind.Follow, NetId = target.Obj.NetworkObjectId, Icon = "skull", Color = Red, Radius = 2.2f });
     }
 
     public override string Finish(bool success)
@@ -123,10 +123,11 @@ internal sealed class HillEvent : RunEvent
         else progress -= dt / (capture * 1.6f);
         progress = Mathf.Clamp01(progress);
 
-        if (Elapsed >= nextSpawn && spawned < 30)
+        if (Elapsed >= nextSpawn && spawned < 20)
         {
-            nextSpawn = Elapsed + 2f;
-            for (int i = 0; i < 2; i++) { Game.SpawnWaveEnemy(Game.PointInRing(zone, Radius + 6f, Radius + 12f)); spawned++; }
+            nextSpawn = Elapsed + 2.5f;
+            Game.SpawnWaveEnemy(Game.PointInRing(zone, Radius + 6f, Radius + 12f));
+            spawned++;
         }
 
         if (progress >= 1f) return true;
@@ -153,7 +154,7 @@ internal sealed class SwarmEvent : RunEvent
     public override Color Accent => Gold;
     public override int Weight => Plugin.SwarmWeight.Value;
 
-    private readonly List<NetworkObject> crabs = new();
+    private readonly List<Game.Tracked> crabs = new();
     private readonly List<bool> done = new();
     private int caught, total;
     private float Limit => Mathf.Max(10f, Plugin.SwarmTime.Value);
@@ -169,7 +170,7 @@ internal sealed class SwarmEvent : RunEvent
         int n = Mathf.Clamp(Plugin.SwarmCount.Value, 1, 20);
         for (int i = 0; i < n; i++)
         {
-            var c = Game.Spawn(type, Game.PointInRing(centre, 8f, 28f));
+            Game.SpawnTracked(type, Game.PointInRing(centre, 8f, 28f), out var c);
             if (c != null) { crabs.Add(c); done.Add(false); }
         }
         total = crabs.Count;
@@ -183,17 +184,30 @@ internal sealed class SwarmEvent : RunEvent
         {
             if (done[i]) continue;
             var fate = Game.FateOf(crabs[i]);
-            if (fate == Game.Fate.Killed) { done[i] = true; caught++; Game.GiveXp(Mathf.Max(0f, Plugin.SwarmXp.Value)); }
+            if (fate == Game.Fate.Killed) { done[i] = true; caught++; Game.GiveXp(Mathf.Max(0f, Plugin.SwarmXp.Value)); EndCrab(crabs[i]); }
             else if (fate == Game.Fate.Gone) done[i] = true;
             else open++;
         }
         if (open == 0) return caught == total;
         if (Elapsed >= Limit)
         {
-            for (int i = 0; i < crabs.Count; i++) if (!done[i]) { done[i] = true; Game.Despawn(crabs[i]); }
+            for (int i = 0; i < crabs.Count; i++) if (!done[i]) { done[i] = true; EndCrab(crabs[i]); }
             return caught == total;
         }
         return null;
+    }
+
+    // Without the Hunt objective nothing removes a golden crab: HuntTarget.EndLifetime plays its death (0 health) or
+    // escape animation and despawns it.
+    private static void EndCrab(Game.Tracked c)
+    {
+        try
+        {
+            var ht = Game.Alive(c.Obj) ? c.Obj.GetComponentInChildren<HuntTarget>(true) : null;
+            if (ht != null) { ht.EndLifetime(); return; }
+        }
+        catch { }
+        Game.Despawn(c.Obj);
     }
 
     public override void Fill(EventState s)
@@ -202,8 +216,8 @@ internal sealed class SwarmEvent : RunEvent
         s.Timer = Mathf.Max(0f, Limit - Elapsed);
         s.Progress = total > 0 ? (float)caught / total : 0f;
         for (int i = 0; i < crabs.Count; i++)
-            if (!done[i] && Game.Alive(crabs[i]))
-                s.Markers.Add(new Marker { Kind = MarkerKind.Follow, NetId = crabs[i].NetworkObjectId, Icon = "crab", Color = Gold, Radius = 1.2f });
+            if (!done[i] && Game.Alive(crabs[i].Obj))
+                s.Markers.Add(new Marker { Kind = MarkerKind.Follow, NetId = crabs[i].Obj.NetworkObjectId, Icon = "crab", Color = Gold, Radius = 0f });
     }
 
     public override string Finish(bool success)
@@ -259,7 +273,7 @@ internal sealed class EscortEvent : RunEvent
             if (to.magnitude <= step) pos = new Vector3(dest.x, pos.y, dest.z);
             else pos += to.normalized * step;
         }
-        if (Elapsed >= nextSpawn && spawned < 24)
+        if (Elapsed >= nextSpawn && spawned < 16)
         {
             nextSpawn = Elapsed + 5f;
             for (int i = 0; i < 2; i++) { Game.SpawnWaveEnemy(Game.PointInRing(pos, 10f, 14f)); spawned++; }
@@ -332,7 +346,7 @@ internal sealed class GauntletEvent : RunEvent
 
     private readonly List<(EnemyType type, int world)> stages = new();
     private int stage;
-    private NetworkObject current;
+    private Game.Tracked current;
     private float spawnAt = -1f;
     private readonly List<string> rewards = new();
     private float Limit => Mathf.Max(30f, Plugin.GauntletTime.Value);
@@ -357,7 +371,7 @@ internal sealed class GauntletEvent : RunEvent
 
     private bool SpawnStage()
     {
-        current = Game.Spawn(stages[stage].type, Game.PointInRing(Game.PartyCentre(), 14f, 22f));
+        Game.SpawnTracked(stages[stage].type, Game.PointInRing(Game.PartyCentre(), 14f, 22f), out current);
         spawnAt = -1f;
         return current != null;
     }
@@ -386,8 +400,8 @@ internal sealed class GauntletEvent : RunEvent
         s.Line = $"Elite {shown + 1}/{stages.Count}: {Pretty(type.ToString())} from {Game.RealmNames[Mathf.Clamp(world, 0, 3)]}";
         s.Timer = Mathf.Max(0f, Limit - Elapsed);
         s.Progress = (float)stage / stages.Count;
-        if (spawnAt < 0f && Game.Alive(current))
-            s.Markers.Add(new Marker { Kind = MarkerKind.Follow, NetId = current.NetworkObjectId, Icon = "sword", Color = Orange, Radius = 2.2f });
+        if (spawnAt < 0f && current != null && !current.Dead && Game.Alive(current.Obj))
+            s.Markers.Add(new Marker { Kind = MarkerKind.Follow, NetId = current.Obj.NetworkObjectId, Icon = "sword", Color = Orange, Radius = 2.2f });
     }
 
     public override string Finish(bool success)
@@ -422,11 +436,12 @@ internal static class WaveBuff
 
     [HarmonyPatch(typeof(EnemyHealthContainer), nameof(EnemyHealthContainer.CalculateMaxHealth))]
     [HarmonyPostfix]
-    private static void MaxHealth_Postfix(ref float __result)
+    private static void MaxHealth_Postfix(EnemyHealthContainer __instance, ref float __result)
     {
         if (wave < 0) return;
         try
         {
+            if (__instance.IsBoss) return;
             var rm = Game.Run;
             if (rm?.CurrentWave == null) return;
             int w = rm.CurrentWave.Value;

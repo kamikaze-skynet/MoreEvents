@@ -25,7 +25,7 @@ public class Hud : MonoBehaviour
     private Image accentLine;
     private readonly List<Image> segments = new();
     private readonly List<Image> icons = new();
-    private int segUsed, iconUsed;
+    private int segUsed, iconUsed, segShown, iconShown;
     private float nextDamage, nextErrorLog;
     private bool outsideSafe;
 
@@ -83,7 +83,10 @@ public class Hud : MonoBehaviour
         if (Time.time < nextDamage) return;
         nextDamage = Time.time + 0.5f;
         float dmg = h.MaxHealth * safe.Dps / 100f * 0.5f;
-        if (dmg > 0f) h.RemoveHealth(dmg, new TakeDamageOnLevelUpCurseDamageInfo(), false);
+        if (dmg <= 0f) return;
+        var info = new TakeDamageOnLevelUpCurseDamageInfo();
+        try { info.Damage = dmg; } catch { }
+        h.RemoveHealth(dmg, info, false);
     }
 
     // ---------- drawing ----------
@@ -172,12 +175,17 @@ public class Hud : MonoBehaviour
 
     private void Circle(Camera cam, Vector3 centre, float radius, Color color, float thickness)
     {
-        for (int i = 0; i <= CircleSteps; i++)
+        // Fewer pieces for rings that are small on screen.
+        var c0 = cam.WorldToScreenPoint(centre);
+        var c1 = cam.WorldToScreenPoint(centre + new Vector3(radius, 0f, 0f));
+        float px = new Vector2(c1.x - c0.x, c1.y - c0.y).magnitude;
+        int steps = Mathf.Clamp(Mathf.RoundToInt(px * Mathf.PI * 2f / 18f), 12, CircleSteps);
+        for (int i = 0; i <= steps; i++)
         {
-            float a = i * Mathf.PI * 2f / CircleSteps;
+            float a = i * Mathf.PI * 2f / steps;
             pts[i] = cam.WorldToScreenPoint(centre + new Vector3(Mathf.Cos(a) * radius, 0.15f, Mathf.Sin(a) * radius));
         }
-        for (int i = 0; i < CircleSteps; i++)
+        for (int i = 0; i < steps; i++)
         {
             var a = pts[i]; var b = pts[i + 1];
             if (a.z <= 0f || b.z <= 0f) continue;
@@ -217,7 +225,7 @@ public class Hud : MonoBehaviour
 
     private Image Segment()
     {
-        if (segUsed < segments.Count) { var s = segments[segUsed++]; if (!s.gameObject.activeSelf) s.gameObject.SetActive(true); return s; }
+        if (segUsed < segments.Count) { var s = segments[segUsed]; if (segUsed >= segShown) s.gameObject.SetActive(true); segUsed++; return s; }
         var go = new GameObject("Seg");
         go.transform.SetParent(worldCanvas.transform, false);
         var img = go.AddComponent<Image>();
@@ -232,7 +240,7 @@ public class Hud : MonoBehaviour
 
     private Image IconImage()
     {
-        if (iconUsed < icons.Count) { var s = icons[iconUsed++]; if (!s.gameObject.activeSelf) s.gameObject.SetActive(true); s.transform.SetAsLastSibling(); return s; }
+        if (iconUsed < icons.Count) { var s = icons[iconUsed]; if (iconUsed >= iconShown) s.gameObject.SetActive(true); iconUsed++; s.transform.SetAsLastSibling(); return s; }
         var go = new GameObject("Icon");
         go.transform.SetParent(worldCanvas.transform, false);
         var img = go.AddComponent<Image>();
@@ -246,10 +254,13 @@ public class Hud : MonoBehaviour
         return img;
     }
 
+    // Only the pieces used last frame but not this one need switching off.
     private void HideUnused()
     {
-        for (int i = segUsed; i < segments.Count; i++) if (segments[i] != null && segments[i].gameObject.activeSelf) segments[i].gameObject.SetActive(false);
-        for (int i = iconUsed; i < icons.Count; i++) if (icons[i] != null && icons[i].gameObject.activeSelf) icons[i].gameObject.SetActive(false);
+        for (int i = segUsed; i < segShown && i < segments.Count; i++) if (segments[i] != null) segments[i].gameObject.SetActive(false);
+        for (int i = iconUsed; i < iconShown && i < icons.Count; i++) if (icons[i] != null) icons[i].gameObject.SetActive(false);
+        segShown = segUsed;
+        iconShown = iconUsed;
     }
 
     // ---------- building the UI ----------
@@ -268,6 +279,7 @@ public class Hud : MonoBehaviour
         if (font == null) return false;
 
         segments.Clear(); icons.Clear();
+        segShown = iconShown = 0;
 
         // Rings and icons, in screen pixels, under the game's HUD.
         worldCanvas = new GameObject("MoreEvents_World");

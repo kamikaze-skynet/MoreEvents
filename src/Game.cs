@@ -20,10 +20,15 @@ internal static class Game
 
     internal static bool Alive(UObject o) => o is not null && !o.WasCollected && o != null;
 
+    private static readonly Dictionary<Type, float> nextLookup = new();
+
+    // Re-scans the scene at most once a second while the object doesn't exist (e.g. in the lobby).
     private static T Find<T>(ref T cache) where T : UObject
     {
         if (Alive(cache)) return cache;
+        if (nextLookup.TryGetValue(typeof(T), out var t) && Time.unscaledTime < t) return null;
         cache = UObject.FindObjectOfType<T>();
+        if (!Alive(cache)) { cache = null; nextLookup[typeof(T)] = Time.unscaledTime + 1f; }
         return cache;
     }
 
@@ -46,27 +51,47 @@ internal static class Game
 
     // ---------- players ----------
 
+    private static List<GameplayPlayerIdentity> players = new();
+    private static float nextPlayerScan;
+
+    /// <summary>The players, re-scanned twice a second (FindObjectsOfType is too slow for every frame).</summary>
     internal static List<GameplayPlayerIdentity> Players()
     {
-        var list = new List<GameplayPlayerIdentity>();
-        foreach (var p in UObject.FindObjectsOfType<GameplayPlayerIdentity>())
-            if (p != null && p.IsSpawned) list.Add(p);
-        return list;
+        if (Time.unscaledTime >= nextPlayerScan)
+        {
+            nextPlayerScan = Time.unscaledTime + 0.5f;
+            var list = new List<GameplayPlayerIdentity>();
+            foreach (var p in UObject.FindObjectsOfType<GameplayPlayerIdentity>())
+                if (p != null && p.IsSpawned) list.Add(p);
+            players = list;
+        }
+        players.RemoveAll(p => !Alive(p));
+        return players;
     }
+
+    private static readonly Dictionary<IntPtr, PlayerHealthContainer> playerHealth = new();
 
     internal static PlayerHealthContainer HealthOf(GameplayPlayerIdentity p)
     {
-        try { return p.GetComponentInChildren<PlayerHealthContainer>(); } catch { return null; }
+        try
+        {
+            if (playerHealth.TryGetValue(p.Pointer, out var h) && Alive(h)) return h;
+            h = p.GetComponentInChildren<PlayerHealthContainer>(true); // dead players are switched off: include inactive
+            if (h != null) playerHealth[p.Pointer] = h;
+            return h;
+        }
+        catch { return null; }
     }
 
     internal static bool IsAlive(GameplayPlayerIdentity p)
     {
         try
         {
+            if (!p.gameObject.activeInHierarchy) return false;
             var h = HealthOf(p);
-            return h == null || !h.IsHealthZero();
+            return h != null && !h.IsHealthZero();
         }
-        catch { return true; }
+        catch { return false; }
     }
 
     internal static List<Vector3> LivingPlayerPositions()
@@ -181,22 +206,48 @@ internal static class Game
         catch (Exception ex) { Plugin.Log.LogWarning($"Spawning a wave enemy: {ex.Message}"); }
     }
 
-    internal static EnemyHealthContainer HealthOf(NetworkObject o)
+    /// <summary>An enemy an event spawned: its health is looked up once (dying switches the object off at once,
+    /// before it's despawned, and an inactive child isn't found by a normal lookup).</summary>
+    internal sealed class Tracked
     {
-        try { return o.GetComponentInChildren<EnemyHealthContainer>(); } catch { return null; }
+        public NetworkObject Obj;
+        public EnemyHealthContainer Health;
+        public bool Dead;
+    }
+
+    internal static Tracked Track(NetworkObject o)
+    {
+        if (o == null) return null;
+        var t = new Tracked { Obj = o };
+        try { t.Health = o.GetComponentInChildren<EnemyHealthContainer>(true); } catch { }
+        try
+        {
+            // Event enemies mustn't be removed by the spawner's "off screen too long" clean-up.
+            var e = o.GetComponentInChildren<Enemy>(true);
+            if (e != null) e.SetOverrideImmuneToDespawning(true);
+        }
+        catch { }
+        return t;
+    }
+
+    internal static NetworkObject SpawnTracked(EnemyType type, Vector3 position, out Tracked tracked)
+    {
+        var o = Spawn(type, position);
+        tracked = Track(o);
+        return o;
     }
 
     internal enum Fate { Alive, Killed, Gone }
 
-    internal static Fate FateOf(NetworkObject o)
+    internal static Fate FateOf(Tracked t)
     {
-        if (!Alive(o)) return Fate.Gone;
+        if (t == null) return Fate.Gone;
+        if (t.Dead) return Fate.Killed;
         try
         {
-            if (!o.IsSpawned) return Fate.Gone;
-            var h = HealthOf(o);
-            if (h != null && h.IsHealthZero()) return Fate.Killed;
-            if (!o.gameObject.activeInHierarchy) return Fate.Gone;
+            if (Alive(t.Health) && t.Health.IsHealthZero()) { t.Dead = true; return Fate.Killed; }
+            if (!Alive(t.Obj) || !t.Obj.IsSpawned) return Fate.Gone;
+            if (!t.Obj.gameObject.activeInHierarchy) return Fate.Gone;
         }
         catch { return Fate.Gone; }
         return Fate.Alive;
@@ -207,7 +258,7 @@ internal static class Game
         try { if (Alive(o) && o.IsSpawned) o.Despawn(true); } catch { }
     }
 
-    internal static List<Vector3> EnemyPositions()
+    internal static List<Vector3> EnemyPositions() // the caller throttles this
     {
         var list = new List<Vector3>();
         foreach (var e in UObject.FindObjectsOfType<EnemyHealthContainer>())
