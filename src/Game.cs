@@ -50,18 +50,21 @@ internal static class Game
     }
 
     // ---------- players ----------
+    // GameplayPlayerIdentity is only the player's record: it stays put and has no health. The wizard you move is a
+    // separate GameplayPlayer object (swapped for a "dead player" object while down), so positions and health come
+    // from GameplayPlayer.
 
-    private static List<GameplayPlayerIdentity> players = new();
+    private static List<GameplayPlayer> players = new();
     private static float nextPlayerScan;
 
-    /// <summary>The players, re-scanned twice a second (FindObjectsOfType is too slow for every frame).</summary>
-    internal static List<GameplayPlayerIdentity> Players()
+    /// <summary>The players' wizards, re-scanned twice a second (FindObjectsOfType is too slow for every frame).</summary>
+    internal static List<GameplayPlayer> Players()
     {
         if (Time.unscaledTime >= nextPlayerScan)
         {
             nextPlayerScan = Time.unscaledTime + 0.5f;
-            var list = new List<GameplayPlayerIdentity>();
-            foreach (var p in UObject.FindObjectsOfType<GameplayPlayerIdentity>())
+            var list = new List<GameplayPlayer>();
+            foreach (var p in UObject.FindObjectsOfType<GameplayPlayer>())
                 if (p != null && p.IsSpawned) list.Add(p);
             players = list;
         }
@@ -69,27 +72,29 @@ internal static class Game
         return players;
     }
 
-    private static readonly Dictionary<IntPtr, PlayerHealthContainer> playerHealth = new();
-
-    internal static PlayerHealthContainer HealthOf(GameplayPlayerIdentity p)
+    internal static PlayerHealthContainer HealthOf(GameplayPlayer p)
     {
         try
         {
-            if (playerHealth.TryGetValue(p.Pointer, out var h) && Alive(h)) return h;
-            h = p.GetComponentInChildren<PlayerHealthContainer>(true); // dead players are switched off: include inactive
-            if (h != null) playerHealth[p.Pointer] = h;
-            return h;
+            var h = p.HealthContainer;
+            if (!Alive(h)) h = p.GetComponentInChildren<PlayerHealthContainer>(true);
+            return Alive(h) ? h : null;
         }
         catch { return null; }
     }
 
-    internal static bool IsAlive(GameplayPlayerIdentity p)
+    internal static Vector3 PositionOf(GameplayPlayer p)
+    {
+        try { return p.GetPosition(); } catch { return p.transform.position; }
+    }
+
+    internal static bool IsAlive(GameplayPlayer p)
     {
         try
         {
             if (!p.gameObject.activeInHierarchy) return false;
             var h = HealthOf(p);
-            return h != null && !h.IsHealthZero();
+            return h == null || !h.IsHealthZero();
         }
         catch { return false; }
     }
@@ -98,21 +103,21 @@ internal static class Game
     {
         var list = new List<Vector3>();
         foreach (var p in Players())
-            if (IsAlive(p)) list.Add(p.transform.position);
+            if (IsAlive(p)) list.Add(PositionOf(p));
         return list;
     }
 
     internal static Vector3 PartyCentre()
     {
         var ps = LivingPlayerPositions();
-        if (ps.Count == 0) foreach (var p in Players()) ps.Add(p.transform.position);
+        if (ps.Count == 0) foreach (var p in Players()) ps.Add(PositionOf(p));
         if (ps.Count == 0) return Vector3.zero;
         var c = Vector3.zero;
         foreach (var p in ps) c += p;
         return c / ps.Count;
     }
 
-    internal static GameplayPlayerIdentity LocalPlayer()
+    internal static GameplayPlayer LocalPlayer()
     {
         foreach (var p in Players())
             if (p.IsOwner) return p;

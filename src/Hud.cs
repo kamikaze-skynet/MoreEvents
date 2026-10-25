@@ -78,7 +78,7 @@ public class Hud : MonoBehaviour
         if (me == null) return;
         var h = Game.HealthOf(me);
         if (h == null || h.IsHealthZero()) return;
-        if (Game.FlatDistance(me.transform.position, safe.Pos) <= safe.Radius) return;
+        if (Game.FlatDistance(Game.PositionOf(me), safe.Pos) <= safe.Radius) return;
         outsideSafe = true;
         if (Time.time < nextDamage) return;
         nextDamage = Time.time + 0.5f;
