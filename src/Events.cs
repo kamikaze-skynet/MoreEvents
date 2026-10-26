@@ -25,6 +25,12 @@ internal abstract class RunEvent
     public abstract void Fill(EventState s);
     public abstract string Finish(bool success);
 
+    /// <summary>About how long the event lasts (for keeping it clear of the game's own events).</summary>
+    public virtual float Length => 75f;
+
+    /// <summary>The game's own objective or boss started: tidy up what this event spawned (no reward, no penalty).</summary>
+    public virtual void CallOff() { }
+
     protected static string Pretty(string id)
     {
         if (string.IsNullOrEmpty(id)) return "?";
@@ -54,6 +60,8 @@ internal sealed class BountyEvent : RunEvent
     private Game.Tracked target;
     private string name = "";
     private float Limit => Mathf.Max(10f, Plugin.BountyTime.Value);
+    public override float Length => Limit;
+    public override void CallOff() { if (target != null) Game.Despawn(target.Obj); }
 
     protected override bool Begin()
     {
@@ -104,6 +112,7 @@ internal sealed class HillEvent : RunEvent
     private float progress, nextSpawn;
     private int inside, spawned;
     private float Limit => Mathf.Max(15f, Plugin.HillTime.Value);
+    public override float Length => Limit;
     private float Radius => Mathf.Clamp(Plugin.HillRadius.Value, 2f, 20f);
 
     protected override bool Begin()
@@ -158,6 +167,8 @@ internal sealed class SwarmEvent : RunEvent
     private readonly List<bool> done = new();
     private int caught, total;
     private float Limit => Mathf.Max(10f, Plugin.SwarmTime.Value);
+    public override float Length => Limit;
+    public override void CallOff() { for (int i = 0; i < crabs.Count; i++) if (!done[i]) { done[i] = true; EndCrab(crabs[i]); } }
 
     protected override bool Begin()
     {
@@ -241,6 +252,7 @@ internal sealed class EscortEvent : RunEvent
     private List<Vector3> enemies = new();
     private const float EscortRange = 7f, AttackRange = 4.5f, Speed = 2.2f;
     private float Limit => Mathf.Max(20f, Plugin.EscortTime.Value);
+    public override float Length => Limit;
 
     protected override bool Begin()
     {
@@ -311,6 +323,7 @@ internal sealed class CursedEvent : RunEvent
 
     private Vector3 from, to;
     private float Duration => Mathf.Max(10f, Plugin.CursedTime.Value);
+    public override float Length => Duration;
 
     protected override bool Begin()
     {
@@ -350,6 +363,8 @@ internal sealed class GauntletEvent : RunEvent
     private float spawnAt = -1f;
     private readonly List<string> rewards = new();
     private float Limit => Mathf.Max(30f, Plugin.GauntletTime.Value);
+    public override float Length => Limit;
+    public override void CallOff() { if (current != null) Game.Despawn(current.Obj); }
 
     protected override bool Begin()
     {

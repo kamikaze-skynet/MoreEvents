@@ -1,3 +1,6 @@
+## 1.0.5
+- **Events keep clear of the game's own.** An event now only starts when none of the game's objectives (fungi, statues, capture zones...), the boss or its enemy events (the line of dogs, the mob...) is running or due while it lasts, with a quiet gap either side (new setting `General.GapSeconds`, 30 s). It knows which waves bring an objective and when the boss is due. If an objective or the boss starts anyway, the event is called off with no penalty.
+
 ## 1.0.4
 - **Fixed King of the Hill and Escort the Fungus.** The mod was reading each player's position from an object that never moves with the wizard, so it never saw anyone in the zone: the hill never filled and the fungus never moved. It now tracks the wizards themselves.
 - The same fix applies to the other events: bounty targets, golden crabs and gauntlet elites now spawn around where the party actually is, and Cursed Ground checks where you really are.

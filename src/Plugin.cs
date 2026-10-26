@@ -16,7 +16,7 @@ public class Plugin : BasePlugin
 {
     public const string Guid = "girthy_mods.MoreEvents";
     public const string Name = "MoreEvents";
-    public const string Version = "1.0.4";
+    public const string Version = "1.0.5";
 
     internal static new ManualLogSource Log;
 
@@ -25,6 +25,7 @@ public class Plugin : BasePlugin
     internal static ConfigEntry<float> SecondsBetween;
     internal static ConfigEntry<float> RandomExtra;
     internal static ConfigEntry<bool> SkipDuringObjectives;
+    internal static ConfigEntry<float> GapSeconds;
     internal static ConfigEntry<string> StartKey;
 
     internal static ConfigEntry<int> BountyWeight, HillWeight, SwarmWeight, EscortWeight, CursedWeight, GauntletWeight;
@@ -51,7 +52,9 @@ public class Plugin : BasePlugin
         RandomExtra = Config.Bind("General", "RandomExtraSeconds", 60f,
             new ConfigDescription("Up to this much extra time is added at random between events.", new AcceptableValueRange<float>(0f, 600f)));
         SkipDuringObjectives = Config.Bind("General", "WaitForObjectives", true,
-            "Don't start an event while one of the game's own objectives (or the boss) is active.");
+            "Keep events apart from the game's own objectives, the boss and its enemy events (the line of dogs, the mob...): an event only starts when none of those is running or due during it, and steps aside if an objective or the boss starts anyway.");
+        GapSeconds = Config.Bind("General", "GapSeconds", 30f,
+            new ConfigDescription("Quiet time kept between the game's own objectives/enemy events and these events.", new AcceptableValueRange<float>(0f, 300f)));
         StartKey = Config.Bind("General", "StartEventKey", "F5",
             "Key (host) that starts a random event right away (Unity Input System key name). Empty = no key.");
 
@@ -88,6 +91,7 @@ public class Plugin : BasePlugin
 
         var harmony = new Harmony(Guid);
         harmony.PatchAll(typeof(WaveBuff));
+        try { harmony.PatchAll(typeof(Spacing)); } catch (System.Exception ex) { Log.LogWarning($"Spacing from the game's events unavailable: {ex.Message}"); }
         AddComponent<Hud>();
         Log.LogInfo($"{Name} {Version} ready.");
     }

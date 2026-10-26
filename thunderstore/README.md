@@ -26,7 +26,8 @@ Each event shows a banner (title, timer, progress bar), rings on the ground, and
   - `FirstEventAfterSeconds` (120)
   - `SecondsBetweenEvents` (150)
   - `RandomExtraSeconds` (60)
-  - `WaitForObjectives` (true)
+  - `WaitForObjectives` (true): keep events clear of the game's objectives, the boss and its enemy events
+  - `GapSeconds` (30): quiet time kept around those
   - `StartEventKey` (F5)
 - **`[Events]`**: a chance weight for each event (0 = never).
 - **`[Bounty]`**: `TimeLimit`, `EscapeHealthBuffPercent`.

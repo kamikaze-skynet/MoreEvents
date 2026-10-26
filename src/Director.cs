@@ -22,6 +22,7 @@ internal static class Director
 
     internal static void Reset()
     {
+        Spacing.Reset();
         active = null;
         nextAt = -1f;
         runPtr = IntPtr.Zero;
@@ -46,9 +47,12 @@ internal static class Director
         catch { return; }
         if (!started) return;
         if (nextAt < 0f) nextAt = Mathf.Max(runTime, 0f) + Mathf.Max(10f, Plugin.FirstEventAfter.Value);
+        bool objectiveNow = Spacing.ObjectiveRunning(runTime); // every frame, so the gap after one is measured right
 
         if (active != null)
         {
+            // The game's own objective or the boss came up: this event steps aside.
+            if (Plugin.SkipDuringObjectives.Value && !startedBesideObjective && objectiveNow) { CallOff(runTime); return; }
             bool? result;
             try { result = active.Tick(Time.deltaTime); }
             catch (Exception ex) { Plugin.Log.LogError($"{active.Title}: {ex}"); result = false; }
@@ -66,18 +70,25 @@ internal static class Director
         {
             if (!Plugin.Enabled.Value || runTime < nextAt) return;
             if (Time.timeScale <= 0.01f) return;
-            if (Plugin.SkipDuringObjectives.Value && ObjectiveActive()) return;
+            if (Plugin.SkipDuringObjectives.Value && objectiveNow) return;
         }
-        StartRandom(runTime);
+        StartRandom(runTime, keyPressed);
     }
 
-    private static bool ObjectiveActive()
+    private static bool startedBesideObjective;
+    private static float nextWaitLog;
+
+    private static void CallOff(float runTime)
     {
-        try { var d = Game.Objectives; return d != null && d.ActiveObjective != null; }
-        catch { return false; }
+        var ev = active;
+        try { ev.CallOff(); } catch (Exception ex) { Plugin.Log.LogWarning($"{ev.Title} (call off): {ex.Message}"); }
+        Publish(2, "Called off: the realm's own challenge has begun.");
+        Plugin.Log.LogInfo($"Event called off: {ev.Title} (an objective or the boss started).");
+        active = null;
+        nextAt = runTime + Mathf.Max(20f, Plugin.SecondsBetween.Value) * 0.5f;
     }
 
-    private static void StartRandom(float runTime)
+    private static void StartRandom(float runTime, bool forced)
     {
         var options = All().FindAll(e => e.Weight > 0 && !failedToStart.Contains(e.Key));
         if (options.Count == 0) { nextAt = runTime + 30f; failedToStart.Clear(); return; }
@@ -86,6 +97,14 @@ internal static class Director
         int roll = URandom.Range(0, total);
         RunEvent pick = options[0];
         foreach (var e in options) { if (roll < e.Weight) { pick = e; break; } roll -= e.Weight; }
+
+        // Keep clear of the game's own objectives, boss and enemy events (unless the host pressed the key).
+        if (!forced && Plugin.SkipDuringObjectives.Value && !Spacing.ClearFor(runTime, pick.Length))
+        {
+            nextAt = runTime + 5f;
+            if (Time.unscaledTime >= nextWaitLog) { nextWaitLog = Time.unscaledTime + 60f; Plugin.Log.LogInfo($"Next event waits: {Spacing.Reason}."); }
+            return;
+        }
 
         bool ok;
         try { ok = pick.Start(); }
@@ -99,6 +118,7 @@ internal static class Director
         }
         failedToStart.Clear();
         active = pick;
+        startedBesideObjective = Spacing.ObjectiveRunning(runTime);
         Plugin.Log.LogInfo($"Event started: {pick.Title}.");
         Publish(0, "");
     }
