@@ -24,6 +24,7 @@ internal static class Spacing
     private static readonly List<(float from, float to)> enemyEvents = new(); // run time
     private static float lastBusy = -999f;    // run time when an objective / the boss was last seen running
     private static EndBossObjective boss;
+    private static bool bossSeen;
 
     internal static float Gap => Mathf.Max(0f, Plugin.GapSeconds.Value);
 
@@ -32,6 +33,7 @@ internal static class Spacing
         enemyEvents.Clear();
         lastBusy = -999f;
         boss = null;
+        bossSeen = false;
     }
 
     // ---------- what the game is doing ----------
@@ -53,7 +55,7 @@ internal static class Spacing
 
     [HarmonyPatch(typeof(EndBossObjective), nameof(EndBossObjective.OnNetworkSpawn))]
     [HarmonyPostfix]
-    private static void Boss_Postfix(EndBossObjective __instance) => boss = __instance;
+    private static void Boss_Postfix(EndBossObjective __instance) { boss = __instance; bossSeen = false; }
 
     // From the boss objective appearing (its intro) until the boss is down. (Endless runs go on after it.)
     private static bool BossFight()
@@ -62,7 +64,9 @@ internal static class Spacing
         {
             if (!Game.Alive(boss) || !boss.IsSpawned) return false;
             var h = boss.bossHealthContainer;
-            return h == null || h.WasCollected || !h.IsHealthZero();
+            bool alive = Game.Alive(h) && !h.IsHealthZero();
+            if (alive) { bossSeen = true; return true; }
+            return !bossSeen; // before the boss appears (its intro); once it has been seen, gone or dead = over
         }
         catch { return false; }
     }
