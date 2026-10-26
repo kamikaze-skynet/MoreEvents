@@ -19,7 +19,7 @@ Each event shows a banner (title, timer, progress bar), rings on the ground, and
 
 **Multiplayer:** the host runs the events. Everyone who wants to see the banner and markers needs the mod. Cursed Ground's damage is applied by each player's own game, so players without the mod don't take it.
 
-## Config (`girthy_mods.MoreEvents.cfg`)
+## Config (in your mod manager's config editor)
 
 - **`[General]`**
   - `Enabled`

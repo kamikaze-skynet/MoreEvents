@@ -92,7 +92,8 @@ internal static class Spacing
         return true;
     }
 
-    // Objectives start with their wave; the boss comes at the end of the cycle.
+    // Objectives start with their wave. The game counts waves from 1 (wave k starts (k - 1) wave lengths into the
+    // cycle), picks an objective for the waves listed in its ObjectiveDeterminer, and the boss on the last wave.
     private static bool ObjectiveWaveWithin(float runTime, float seconds)
     {
         try
@@ -103,16 +104,15 @@ internal static class Spacing
             int waves = cfg.Waves.Count;
             float waveLen = cfg.RunDurationInSeconds / waves;
             float cycleTime = rm.currentCycleTimeInSeconds;
-            if (cycleTime + seconds >= cfg.RunDurationInSeconds - 1f) return true; // the boss
             var list = rm.objectiveDeterminer?.waveNumbersForObjectives;
-            if (list == null || list.Count == 0) return false;
-            int current = Mathf.FloorToInt(cycleTime / waveLen);
-            for (int w = current + 1; w < waves; w++)
+            int currentIndex = Mathf.FloorToInt(cycleTime / waveLen); // 0-based
+            for (int idx = currentIndex + 1; idx < waves; idx++)
             {
-                float startsIn = w * waveLen - cycleTime;
+                float startsIn = idx * waveLen - cycleTime;
                 if (startsIn > seconds) break;
-                // The list's wave numbers may count from 0 or 1: treat either as that wave.
-                if (list.Contains(w) || list.Contains(w + 1)) return true;
+                int number = idx + 1;
+                if (number == waves) return true;                       // the boss
+                if (list != null && list.Contains(number)) return true; // an objective
             }
         }
         catch { }
